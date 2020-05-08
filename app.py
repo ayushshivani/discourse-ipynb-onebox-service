@@ -27,6 +27,7 @@ def get_gist_id(gist_name):
 
     get_url = BASE_URL + "/users/" + USER_NAME + "/gists" 
     res = requests.get(get_url,headers=headers)
+
     if res.status_code == 200:
         res_text = json.loads(res.text)
         limit = len(res.json())
@@ -34,9 +35,8 @@ def get_gist_id(gist_name):
         for g,no in zip(res_text, range(0,limit)):  
             for ka,va in res.json()[no]['files'].items():
                 if str(va['filename']) == str(gist_name):
-                    print(res.json()[no]['id'])
                     return res.json()[no]['id']
-        return 0
+    return 0
 
 
 
@@ -46,14 +46,23 @@ def create_gist(content,challenge_name):
     gist_id = get_gist_id(gist_name)
     headers={'Authorization':'token %s'%API_TOKEN}
     params={'scope':'gist'}
-    if gist_id == '':
-        payload={"description":"Gist created to open in colab","public":True,"files":{gist_name:{"content":content}}}
-        res=requests.post(url,headers=headers,params=params,data=json.dumps(payload))
+    try:
+        content = content.decode('utf-8')
+    except:
+        pass
+    if gist_id == 0 :
+        url = BASE_URL + '/gists'
+        payload={"description":"Gist created to open in colab","private":True,"files":{gist_name:{"content":content}}}
+        data = json.dumps(payload)
+        res=requests.post(url,headers=headers,params=params,data=data)
         j=json.loads(res.text)
         gist_id = j['id']
     else:
-        payload={"description":"Gist created to open in colab","public":True,"files":{gist_name:{"content":content}}}
-        res = requests.patch(url,headers=headers,params=params,data=json.dumps(payload))
+        url = BASE_URL + '/gists/' + gist_id
+        payload={"description":"Gist created to open in colab","private":True,"files":{gist_name:{"content":content}}}
+
+        data = json.dumps(payload)
+        res = requests.patch(url,headers=headers,params=params,data=data)
 
     colab_url = COLAB_URL + USER_NAME +"/" + gist_id
     return colab_url
@@ -64,10 +73,7 @@ def create_gist(content,challenge_name):
 def ipynb_handler():
     # Input the parameters
     url = request.args.get('url')
-    # print(url)
     provided_hash = request.args.get('hash')
-    challenge_name = request.args.get('challenge_name')
-    print(url)
     if not url:
         return '<pre>Unable to render, URL not provided</pre>'
 
@@ -102,18 +108,19 @@ def ipynb_handler():
         raise e
         return '<pre>nbconvert parsing error</pre>'
 
-    # Some home baked custom thing
     custom_start = open('start.html', 'r').read()
     raw_url = url.replace("blob","raw")
     download_url = raw_url + "?inline=false"
-    colab_url = create_gist(content,challenge_name)
-    contribute_button = '<a href="' + url + '"class=btn btn-primary"><i class="fas fa-edit"> Contribute</i></a>'
+
+    colab_url = create_gist(content,generated_hash)
+    contribute_button = '<a href="' + url + '" target="_blank"  class="btn btn-primary"><i class="fas fa-edit"> Contribute</i></a>'
     download_button = '<a href="' + download_url + '"class=btn btn-primary"><i class="fa fa-download"> Download</i></a>'
-    colab_button = '<a href="' + colab_url + '"class=btn btn-primary"><i class="fas fa-infinity"> Execute In Colab</i></a>'
+    colab_button = '<a href="' + colab_url + '" target="_blank" class="btn btn-primary"><i class="fas fa-infinity"> Execute In Colab</i></a>'
     custom_start += '<div style="text-align: center;">'+ contribute_button + download_button + colab_button+'</div>'
 
     custom_end = open('end.html', 'r').read()
 
     return custom_start + generated_html + custom_end
 
-
+if __name__ == '__main__':
+    app.run(debug=True)
