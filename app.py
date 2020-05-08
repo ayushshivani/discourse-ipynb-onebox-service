@@ -122,5 +122,3 @@ def ipynb_handler():
 
     return custom_start + generated_html + custom_end
 
-if __name__ == '__main__':
-    app.run(debug=True)
