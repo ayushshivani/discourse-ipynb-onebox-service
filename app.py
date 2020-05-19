@@ -21,8 +21,14 @@ def index():
 
 
 def download_ipynb(url):
-    r = requests.get(url)
-    return r.content
+    CHUNK_SIZE = 32768
+    content = b''
+    response = requests.get(url, allow_redirects=True, stream=True)
+    for chunk in response.iter_content(CHUNK_SIZE):
+        if chunk:
+            content += chunk
+    content.decode("utf-8")
+    return content
 
 def get_gist_id(gist_name):
 
@@ -74,7 +80,7 @@ def authentication(url,provided_hash):
     generated_hash = hashlib.md5((secret+url).encode()).hexdigest()
     if provided_hash != generated_hash:
         return 'failed'
-       return generated_hash
+    return generated_hash
 
 
 def convert_tohtml(download_path):
@@ -85,9 +91,7 @@ def convert_tohtml(download_path):
     except Exception as e:
         raise e
         return '<pre>nbconvert parsing error</pre>'
-
     return generated_html
-
 
 
 @app.route('/render/ipynb')
@@ -98,13 +102,14 @@ def ipynb_handler():
     if not url:
         return '<pre>Unable to render, URL not provided</pre>'
     generated_hash = authentication(url,provided_hash)
+
     if generated_hash == 'failed':
         return '<pre>Authentication Failed</pre>'
 
-    # Downloading the ipynb and 5 minutes caching
+    # Downloading the ipynb and 2 minutes caching
     try:
-        download_path = 'download/' + generated_hash 
-        if os.path.isfile(download_path) and time.time() - os.stat(download_path).st_mtime < 300:
+        download_path = 'download/' + generated_hash
+        if os.path.isfile(download_path) and time.time() - os.stat(download_path).st_mtime < 120:
             content = open(download_path, 'r').read()
         else:
             content = download_ipynb(url)
@@ -120,12 +125,13 @@ def ipynb_handler():
 
     custom_start = open('start.html', 'r').read()
     raw_url = url.replace("blob","raw")
+    url = url.replace("raw", "blob")
     download_url = raw_url + "?inline=false"
 
     colab_url = create_gist(content,generated_hash)
-    contribute_button = '<a href="' + url + '" target="_blank"  class="btn btn-primary"><i class="fas fa-edit"> Contribute</i></a>'
-    download_button = '<a href="' + download_url + '"class=btn btn-primary"><i class="fa fa-download"> Download</i></a>'
-    colab_button = '<a href="' + colab_url + '" target="_blank" class="btn btn-primary"><i class="fas fa-infinity"> Execute In Colab</i></a>'
+    contribute_button = '<a href="' + url + '" target="_blank"  class="btn btn-primary action-btn"><i class="fas fa-edit"> Contribute</i></a>'
+    download_button = '<a href="' + download_url + '" class="btn btn-primary action-btn"><i class="fa fa-download"> Download</i></a>'
+    colab_button = '<a href="' + colab_url + '" target="_blank" class="btn btn-primary action-btn"><i class="fas fa-infinity"> Execute In Colab</i></a>'
     custom_start += '<div style="text-align: center;">'+ contribute_button + download_button + colab_button+'</div>'
 
     custom_end = open('end.html', 'r').read()
@@ -137,7 +143,6 @@ def ipynb_handler():
 def colab_handler():
     # Input the parameters
     url = request.args.get('url')
-    colab_id = re.findall("[-\w]{25,}", url)[0]
     provided_hash = request.args.get('hash')
     if not url:
         return '<pre>Unable to render, URL not provided</pre>'
@@ -147,25 +152,29 @@ def colab_handler():
         return '<pre>Authentication Failed</pre>'
 
 
-    drive_url = "https://docs.google.com/uc?export=download"
+    if "colab.research.google.com/drive/" in url:
+        colab_id = re.findall("[-\w]{25,}", url)[0]
+        download_url = "https://docs.google.com/uc?export=download&id=%s" % (colab_id)
+    elif "colab.research.google.com/github/" in url:
+        github_url = re.findall("github(.*)", url)[0]
+        download_url = "https://github.com" + github_url.split("#")[0]
+        download_url = download_url.replace("blob", "raw")
+    elif "colab.research.google.com/gist/" in url:
+        gist_url = re.findall("gist(.*)", url)[0]
+        download_url = "https://gist.github.com" + gist_url.split("#")[0] + "/raw"
+    else:
+        raise Exception("Wrong type of url sent -> %s" % url)
 
-    # Downloading the ipynb and 5 minutes caching
+    # Downloading the ipynb and 2 minutes caching
     try:
-        download_path = 'download/' + generated_hash 
-        if os.path.isfile(download_path) and time.time() - os.stat(download_path).st_mtime < 300:
+        download_path = 'download/' + generated_hash
+        if os.path.isfile(download_path) and time.time() - os.stat(download_path).st_mtime < 120:
             content = open(download_path, 'r').read()
         else:
-            response = requests.get(drive_url, params = { 'id' : colab_id }, stream = True)
-            CHUNK_SIZE = 32768
+            content = download_ipynb(download_url)
             if os.path.isfile(download_path):
                 os.remove(download_path)
-            
-            with open(download_path, "wb") as f:
-                for chunk in response.iter_content(CHUNK_SIZE):
-                    if chunk: # filter out keep-alive new chunks
-                        f.write(chunk)
-            content = open(download_path, 'r').read()
-            
+            open(download_path,"wb").write(content)
 
     except Exception as e:
         raise e
@@ -174,12 +183,11 @@ def colab_handler():
     generated_html = convert_tohtml(download_path)
 
     custom_start = open('start.html', 'r').read()
-    download_url = drive_url+"&id=" +colab_id
 
-    colab_url = create_gist(content,generated_hash)
+    colab_url = url
 
-    download_button = '<a href="' + download_url + '"class=btn btn-primary"><i class="fa fa-download"> Download</i></a>'
-    colab_button = '<a href="' + url + '" target="_blank" class="btn btn-primary"><i class="fas fa-infinity"> Execute In Colab</i></a>'
+    download_button = '<a href="' + download_url + '" class="btn btn-primary action-btn"><i class="fa fa-download"> Download</i></a>'
+    colab_button = '<a href="' + url + '" target="_blank" class="btn btn-primary action-btn"><i class="fas fa-infinity"> Execute In Colab</i></a>'
     custom_start += '<div style="text-align: center;">' + download_button + colab_button + '</div>'
 
     custom_end = open('end.html', 'r').read()
