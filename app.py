@@ -154,10 +154,12 @@ def colab_handler():
         return '<pre>Unable to render, URL not provided</pre>'
 
     generated_hash = authentication(url,provided_hash)
-    if generated_hash == 'failed':
-        return '<pre>Authentication Failed</pre>'
+    # if generated_hash == 'failed':
+    #     return '<pre>Authentication Failed</pre>'
 
-
+    if "?usp=sharing" in url:
+        url = url.replace("?usp=sharing", '') 
+    # print(url)
     if "colab.research.google.com/drive/" in url:
         colab_id = re.findall("[-\w]{25,}", url)[0]
         download_url = "https://docs.google.com/uc?export=download&id=%s" % (colab_id)
@@ -187,7 +189,6 @@ def colab_handler():
         return '<pre>Error fetching ipynb file</pre>'
 
     generated_html = convert_tohtml(download_path)
-
     custom_start = open('start.html', 'r').read()
 
     colab_url = url
@@ -199,4 +200,6 @@ def colab_handler():
     custom_end = open('end.html', 'r').read()
 
     return custom_start + generated_html + custom_end
+
+
 
