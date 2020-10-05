@@ -50,7 +50,6 @@ def get_gist_id(gist_name):
 def create_gist(content,challenge_name):
     gist_name = challenge_name+"_baseline.ipynb"
     gist_id = get_gist_id(gist_name)
-    print(gist_id)
     headers={'Authorization':'token %s'%API_TOKEN}
     params={'scope':'gist'}
     try:
@@ -62,7 +61,6 @@ def create_gist(content,challenge_name):
         payload={"description":"Gist created to open in colab","private":True,"files":{gist_name:{"content":content}}}
         data = json.dumps(payload)
         res=requests.post(url,headers=headers,params=params,data=data)
-        print(res.status_code)
         j=json.loads(res.text)
         gist_id = j['id']
     else:
@@ -173,7 +171,6 @@ def colab_handler():
     else:
         raise Exception("Wrong type of url sent -> %s" % url)
     
-    print("ADSADSADSADAS",colab_id,download_url)
     # Downloading the ipynb and 2 minutes caching
     try:
         download_path = 'download/' + generated_hash
@@ -181,7 +178,6 @@ def colab_handler():
             content = open(download_path, 'r').read()
         else:
             content = download_ipynb(download_url)
-            print(content)
             if os.path.isfile(download_path):
                 os.remove(download_path)
             open(download_path,"wb").write(content)
